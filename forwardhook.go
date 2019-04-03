@@ -2,88 +2,70 @@ package main
 
 import (
 	"bytes"
-	"fmt"
+	"flag"
 	"io/ioutil"
-	"log"
 	"net/http"
-	"os"
-	"strings"
 	"time"
+	"log"
+	"runtime"
 )
 
-// maxRetries indicates the maximum amount of retries we will perform before
-// giving up
-var maxRetries = 10
+var conf *Config
 
 // mirrorRequest will POST through body and headers from an
 // incoming http.Request.
 // Failures are retried up to 10 times.
-func mirrorRequest(h http.Header, body []byte, url string) {
+func mirrorRequest(method string, h http.Header, body []byte, url string) {
 	attempt := 1
 	for {
-		fmt.Printf("Attempting %s try=%d\n", url, attempt)
+		logger.Info.Printf("Attempting %s try=%d\n", url, attempt)
 
 		client := &http.Client{}
 
 		rB := bytes.NewReader(body)
-		req, err := http.NewRequest("POST", url, rB)
+		req, err := http.NewRequest(method, url, rB)
 		if err != nil {
-			log.Println("[error] http.NewRequest:", err)
+			logger.Error.Println("[error] http.NewRequest:", err)
 		}
 
 		// Set headers from request
 		req.Header = h
 
+		logger.Info.Println(h)
+
 		resp, err := client.Do(req)
 		if err != nil {
-			log.Println("[error] client.Do:", err)
+			logger.Error.Println("[error] client.Do:", err)
 			time.Sleep(10 * time.Second)
 		} else {
 			resp.Body.Close()
-			fmt.Printf("[success] %s status=%d\n", url, resp.StatusCode)
+			logger.Info.Printf("[success] %s status=%d\n", url, resp.StatusCode)
 			break
 		}
 
 		attempt++
-		if attempt > maxRetries {
-			fmt.Println("[error] maxRetries reached")
+		if attempt > conf.MaxRetries {
+			logger.Error.Println("[error] maxRetries reached")
 			break
 		}
 	}
 }
 
-// parseSites gets sites out of the FORWARDHOOK_SITES environment variable.
-// There is no validation at the moment but you can add 1 or more sites,
-// separated by commas.
-func parseSites() []string {
-	sites := os.Getenv("FORWARDHOOK_SITES")
-
-	if sites == "" {
-		log.Fatal("No sites set up, provide FORWARDHOOK_SITES")
-	}
-
-	s := strings.Split(sites, ",")
-	return s
-}
-
 func handleHook(sites []string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "POST" {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-
 		rB, err := ioutil.ReadAll(r.Body)
 		if err != nil {
 			log.Printf("Fail on ReadAll")
 		}
-		r.Body.Close()
+		defer r.Body.Close()
 
 		for _, url := range sites {
-			go mirrorRequest(r.Header, rB, url)
+			go mirrorRequest(r.Method, r.Header, rB, url)
 		}
 
 		w.WriteHeader(http.StatusOK)
+		w.Header().Add("Content-Type", "application/json")
+		w.Write([]byte(`{"status": 1, "data":true}`))
 	})
 }
 
@@ -92,15 +74,27 @@ func handleHealthCheck(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	sites := parseSites()
-	fmt.Println("Will forward hooks to:", sites)
+	confPath := flag.String("c", "config.json", "config json file")
+	flag.Parse()
 
-	http.Handle("/", handleHook(sites))
-	http.HandleFunc("/health-check", handleHealthCheck)
+	runtime.GOMAXPROCS(runtime.NumCPU())
 
-	fmt.Printf("Listening on port 8000\n")
-	err := http.ListenAndServe(":8000", nil)
+	err, conf := NewConfig(*confPath)
 	if err != nil {
-		log.Fatal(err)
+		logger.Error.Println(err)
+		return
+	}
+
+	for _, mapping := range conf.Mappings {
+		logger.Info.Printf("Will forward hooks to: %v , on Path:%v", mapping.Sites,mapping.Path)
+		http.Handle(mapping.Path, handleHook(mapping.Sites))
+	}
+	http.HandleFunc("/status", handleHealthCheck)
+	http.NotFoundHandler()
+
+	logger.Info.Printf("Listening on: http://%v\n", conf.Listen)
+	err = http.ListenAndServe(conf.Listen, nil)
+	if err != nil {
+		logger.Error.Fatal(err)
 	}
 }
