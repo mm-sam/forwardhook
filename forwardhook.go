@@ -13,6 +13,7 @@ import (
 	"github.com/gorilla/mux"
 	"os"
 	"path"
+	"fmt"
 )
 
 var conf *Config
@@ -98,10 +99,7 @@ func main() {
 		}
 		tmpFile := path.Join(dir, "/config.json")
 		conf := InitConfig(tmpFile)
-		err = conf.Save()
-		if err != nil {
-			logger.Error.Println(err)
-		}
+		fmt.Println(conf.Export())
 		return
 	}
 

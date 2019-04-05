@@ -63,6 +63,15 @@ func (c *Config) load(filename string) error {
 	return err
 }
 
+func (c *Config) Export() string {
+	data, err := json.MarshalIndent(c, "", "    ")
+	if err != nil {
+		logger.Error.Println(err)
+		return ""
+	}
+	return string(data)
+}
+
 func (c *Config) Save() error {
 	file, err := os.Create(c.saveFile)
 	if err != nil {
