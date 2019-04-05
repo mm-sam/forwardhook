@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
+	"os"
+	"path"
 )
 
 var conf *Config
@@ -30,7 +32,7 @@ func mirrorRequest(method string, h http.Header, body []byte, url string, query 
 		rB := bytes.NewReader(body)
 		req, err := http.NewRequest(method, url, rB)
 		if err != nil {
-			logger.Error.Println("[error] http.NewRequest:", err)
+			logger.Error.Println("http.NewRequest:", err)
 		}
 
 		// Set headers from request
@@ -85,7 +87,23 @@ func NotFoundHandle(writer http.ResponseWriter, request *http.Request) {
 
 func main() {
 	confPath := flag.String("c", "config.json", "config json file")
+	initFlag := flag.Bool("init", false, "init config.json")
 	flag.Parse()
+
+	if *initFlag {
+		dir, err := os.Getwd()
+		if err != nil {
+			logger.Error.Println(err)
+			return
+		}
+		tmpFile := path.Join(dir, "/config.json")
+		conf := InitConfig(tmpFile)
+		err = conf.Save()
+		if err != nil {
+			logger.Error.Println(err)
+		}
+		return
+	}
 
 	runtime.GOMAXPROCS(runtime.NumCPU())
 

@@ -1,17 +1,11 @@
 {
-    "listen": "0.0.0.0:8899",
+    "listen": "127.0.0.1:8899",
     "retries": 10,
     "mappings": [
         {
-            "path": "/hello/",
+            "path": "/",
             "sites": [
-                "http://www.baidu.com/hello"
-            ]
-        },
-        {
-            "path": "/test/",
-            "sites": [
-                "http://www.baidu.com/test"
+                "http://www.google.com/"
             ]
         }
     ]

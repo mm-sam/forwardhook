@@ -32,6 +32,22 @@ func NewConfig(filename string) (err error, c *Config) {
 	return
 }
 
+func InitConfig(savePath string) *Config {
+	return &Config{
+		saveFile: savePath,
+		Listen: "127.0.0.1:8899",
+		MaxRetries: 10,
+		Mappings: []Mapping{
+			Mapping{
+				Path: "/",
+				Sites: []string{
+					"http://www.google.com/",
+				},
+			},
+		},
+	}
+}
+
 func (c *Config) load(filename string) error {
 	file, err := os.Open(filename)
 	if err != nil {
